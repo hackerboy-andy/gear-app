@@ -1,8 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./lib/supabase";
+import {
+  fetchEquipment,
+  insertEquipment,
+  updateEquipmentField,
+  deleteEquipment,
+  resetWearPart,
+} from "./lib/db";
 
 /* ═══════════════════════════════════════════════════════
    SPORT EQUIPMENT DATABASE + WEAR TRACKER
-   Light, athletic, clean design
+   Light, athletic, clean design – with Supabase Auth
    ═══════════════════════════════════════════════════════ */
 
 const C = {
@@ -109,84 +117,6 @@ const STRAVA_ACTIVITIES = [
   { id: "sa7", name: "Sonntagsrunde", type: "Ride", date: "2026-02-27", distance: 88400, gear_id: "b12345678", trainer: false, elapsed: 10800 },
 ];
 
-// ── Demo Equipment Data ──
-const INITIAL_EQUIPMENT = [
-  {
-    id: "eq1", category: "bike", name: "Canyon Aeroad CF SLX", subtype: "Rennrad",
-    image: null, serialNumber: "WMY22B0456", purchaseDate: "2023-04-15", purchasePrice: 4299,
-    retailer: "Canyon.com", notes: "Disc Version, Stealth Grey",
-    stravaGearId: "b12345678",  // ← PAIRED with Strava gear
-    specs: { frame_material: "Carbon", frame_size: "56cm", groupset: "Shimano Ultegra Di2 R8170", wheelset: "DT Swiss ARC 1400", tires: "Continental GP5000 25c", saddle: "Fizik Arione R1", handlebar: "Canyon H36 Aerocockpit", stem: "integriert", pedals: "Shimano SPD-SL PD-R8000", weight: "7.4 kg" },
-    totalKm: 12847,
-    wearParts: [
-      { id: "w1", name: "Kette", icon: "⛓️", brand: "Shimano CN-HG901", km: 4420, maxKm: 5000, date: "2025-09-15", cost: 42 },
-      { id: "w2", name: "Bremsbeläge vorne", icon: "🛑", brand: "SwissStop FlashPro", km: 4100, maxKm: 5000, date: "2025-06-20", cost: 32 },
-      { id: "w3", name: "Bremsbeläge hinten", icon: "🛑", brand: "SwissStop FlashPro", km: 4100, maxKm: 5000, date: "2025-06-20", cost: 32 },
-      { id: "w4", name: "Reifen vorne", icon: "◉", brand: "Conti GP5000 25c", km: 2800, maxKm: 6000, date: "2025-11-01", cost: 65 },
-      { id: "w5", name: "Reifen hinten", icon: "◉", brand: "Conti GP5000 25c", km: 2800, maxKm: 6000, date: "2025-11-01", cost: 65 },
-      { id: "w6", name: "Kassette", icon: "⚙️", brand: "Ultegra R8100", km: 8200, maxKm: 15000, date: "2024-12-01", cost: 85 },
-      { id: "w7", name: "Lenkerband", icon: "🎗️", brand: "Supacaz Sticky", km: 1200, maxKm: 3000, date: "2026-01-10", cost: 35 },
-    ],
-  },
-  {
-    id: "eq2", category: "bike", name: "Specialized Diverge Expert", subtype: "Gravel",
-    image: null, serialNumber: "WSBC604123789", purchaseDate: "2024-02-10", purchasePrice: 3899,
-    retailer: "Bike24", notes: "Carbon, Olive Green",
-    stravaGearId: "b87654321",  // ← PAIRED
-    specs: { frame_material: "Carbon", frame_size: "54cm", groupset: "SRAM Rival eTap AXS", wheelset: "Roval Terra CLX", tires: "Pathfinder Pro 42c", saddle: "Specialized Power Expert", handlebar: "Specialized Hover", stem: "100mm", pedals: "Shimano XT SPD", weight: "8.9 kg" },
-    totalKm: 4230,
-    wearParts: [
-      { id: "w8", name: "Kette", icon: "⛓️", brand: "SRAM Rival", km: 2100, maxKm: 4000, date: "2025-10-01", cost: 38 },
-      { id: "w9", name: "Reifen vorne", icon: "◉", brand: "Pathfinder Pro 42c", km: 3800, maxKm: 5000, date: "2025-05-15", cost: 55 },
-      { id: "w10", name: "Reifen hinten", icon: "◉", brand: "Pathfinder Pro 42c", km: 3800, maxKm: 5000, date: "2025-05-15", cost: 55 },
-    ],
-  },
-  {
-    id: "eq3", category: "running", name: "Nike Vaporfly Next% 3", subtype: "Wettkampf",
-    image: null, serialNumber: "", purchaseDate: "2025-04-01", purchasePrice: 260,
-    retailer: "Nike.com", notes: "Neongelb, für 10K & HM",
-    stravaGearId: "g11223344",  // ← PAIRED
-    specs: { shoe_size: "43 EU / 9.5 US", shoe_type: "Wettkampf", drop: "8mm", stack: "40mm", shoe_weight: "194g", cushioning: "Maximal", upper: "VaporWeave", midsole: "ZoomX + Carbon Plate" },
-    totalKm: 487,
-    wearParts: [
-      { id: "w11", name: "Schuh gesamt", icon: "👟", brand: "Nike Vaporfly Next% 3", km: 487, maxKm: 500, date: "2025-04-01", cost: 260 },
-    ],
-  },
-  {
-    id: "eq4", category: "running", name: "ASICS Gel Nimbus 26", subtype: "Training",
-    image: null, serialNumber: "", purchaseDate: "2025-06-15", purchasePrice: 180,
-    retailer: "Keller Sports", notes: "Daily Trainer",
-    stravaGearId: "g44332211",  // ← PAIRED
-    specs: { shoe_size: "43 EU / 9.5 US", shoe_type: "Training", drop: "8mm", stack: "41mm", shoe_weight: "290g", cushioning: "Maximal", upper: "Engineered Mesh", midsole: "FF Blast Plus Eco" },
-    totalKm: 312,
-    wearParts: [
-      { id: "w12", name: "Schuh gesamt", icon: "👟", brand: "ASICS Gel Nimbus 26", km: 312, maxKm: 800, date: "2025-06-15", cost: 180 },
-    ],
-  },
-  {
-    id: "eq5", category: "ski", name: "Atomic Redster S9i", subtype: "Race",
-    image: null, serialNumber: "AT2024RS9I-1234", purchaseDate: "2024-11-20", purchasePrice: 899,
-    retailer: "Sport Bittl", notes: "Slalom-Ski, Wettkampf Setup",
-    specs: { ski_length: "165cm", ski_radius: "12.5m", ski_width: "121-68-104mm", ski_type: "Race", binding: "Atomic X12 GW", boots: "Atomic Redster CS 130", boot_size: "27.5 Mondo" },
-    totalKm: 0,
-    wearParts: [
-      { id: "w13", name: "Kanten", icon: "🔪", brand: "Factory Edge", km: 18, maxKm: 100, date: "2024-11-20", cost: 0 },
-      { id: "w14", name: "Belag", icon: "🧊", brand: "Factory Base", km: 18, maxKm: 30, date: "2024-11-20", cost: 0 },
-    ],
-  },
-  {
-    id: "eq6", category: "snowboard", name: "Burton Custom X", subtype: "All-Mountain",
-    image: null, serialNumber: "BUR-CX-2024-5582", purchaseDate: "2024-10-05", purchasePrice: 650,
-    retailer: "Blue Tomato", notes: "Camber, sehr responsive",
-    specs: { board_length: "158cm", board_width: "25.5cm", board_type: "All-Mountain", board_flex: "Stiff (7-10)", board_profile: "Camber", sb_binding: "Burton Genesis X", sb_boots: "Burton Ion 43" },
-    totalKm: 0,
-    wearParts: [
-      { id: "w15", name: "Kanten", icon: "🔪", brand: "Factory Edge", km: 12, maxKm: 80, date: "2024-10-05", cost: 0 },
-      { id: "w16", name: "Belag", icon: "🧊", brand: "Factory Base", km: 12, maxKm: 25, date: "2024-10-05", cost: 0 },
-    ],
-  },
-];
-
 // ── Helpers ──
 const fmtKm = (n) => n.toLocaleString("de-DE");
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "–";
@@ -219,6 +149,146 @@ function Logo({ size = 26 }) {
       <circle cx="50" cy="50" r="42" fill="none" stroke="url(#lg1)" strokeWidth="7" strokeDasharray="165 99" strokeLinecap="round" transform="rotate(-225 50 50)"/>
       <circle cx="50" cy="50" r="10" fill="url(#lg1)" opacity="0.85"/>
     </svg>
+  );
+}
+
+// ══════════════════════════════════════
+//  AUTH SCREEN
+// ══════════════════════════════════════
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login"); // login | signup | reset
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+
+  const inp = {
+    width: "100%", background: C.bg, border: "2px solid transparent", borderRadius: 12,
+    padding: "13px 16px", color: C.text, fontSize: 15, outline: "none", boxSizing: "border-box",
+    fontFamily: "'Satoshi', sans-serif", transition: "border-color 0.2s",
+  };
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        setMessage("Check deine E-Mails für den Bestätigungslink!");
+        setMode("login");
+      } else if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        if (error) throw error;
+        setMessage("Password-Reset Link gesendet!");
+        setMode("login");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Satoshi', 'DM Sans', -apple-system, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 400, padding: "0 24px" }}>
+        {/* Logo + Title */}
+        <div style={{ textAlign: "center", marginBottom: 36, animation: "si 0.4s both" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+            <Logo size={48} />
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: C.text, letterSpacing: -0.5 }}>My Gear</h1>
+          <p style={{ fontSize: 13, color: C.sub, marginTop: 6 }}>Sport Equipment Tracker</p>
+        </div>
+
+        {/* Form Card */}
+        <div style={{ background: C.card, borderRadius: 20, padding: "28px 24px", border: `1px solid ${C.border}`, animation: "si 0.45s 0.05s both" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+            {mode === "login" ? "Willkommen zurück" : mode === "signup" ? "Account erstellen" : "Passwort zurücksetzen"}
+          </h2>
+          <p style={{ fontSize: 12, color: C.sub, marginBottom: 20 }}>
+            {mode === "login" ? "Melde dich an, um dein Gear zu verwalten" : mode === "signup" ? "Registriere dich kostenlos" : "Wir senden dir einen Reset-Link"}
+          </p>
+
+          {error && (
+            <div style={{ background: C.redLight, border: `1px solid ${C.red}25`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: C.red, fontWeight: 600 }}>{error}</div>
+            </div>
+          )}
+
+          {message && (
+            <div style={{ background: C.greenLight, border: `1px solid ${C.green}25`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>{message}</div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.sub, display: "block", marginBottom: 4 }}>E-Mail</label>
+              <input
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="deine@email.de" required style={inp}
+                onFocus={e => e.target.style.borderColor = C.accent}
+                onBlur={e => e.target.style.borderColor = "transparent"}
+              />
+            </div>
+
+            {mode !== "reset" && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.sub, display: "block", marginBottom: 4 }}>Passwort</label>
+                <input
+                  type="password" value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder={mode === "signup" ? "Min. 6 Zeichen" : "Dein Passwort"} required
+                  minLength={mode === "signup" ? 6 : undefined} style={inp}
+                  onFocus={e => e.target.style.borderColor = C.accent}
+                  onBlur={e => e.target.style.borderColor = "transparent"}
+                />
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} style={{
+              width: "100%", padding: 14, borderRadius: 14, border: "none",
+              background: loading ? C.muted : C.accent, color: "#fff",
+              fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer",
+              transition: "background 0.2s", marginBottom: 12,
+            }}>
+              {loading ? "Laden..." : mode === "login" ? "Anmelden" : mode === "signup" ? "Registrieren" : "Link senden"}
+            </button>
+          </form>
+
+          {/* Mode switchers */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            {mode === "login" && (
+              <>
+                <button onClick={() => { setMode("signup"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>
+                  Noch kein Account? Registrieren
+                </button>
+                <button onClick={() => { setMode("reset"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", fontSize: 11, color: C.muted, cursor: "pointer" }}>
+                  Passwort vergessen?
+                </button>
+              </>
+            )}
+            {(mode === "signup" || mode === "reset") && (
+              <button onClick={() => { setMode("login"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>
+                Zurück zum Login
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p style={{ textAlign: "center", fontSize: 10, color: C.muted, marginTop: 20, animation: "si 0.5s 0.1s both" }}>
+          Deine Daten werden sicher in der Cloud gespeichert
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -284,12 +354,10 @@ function EquipmentList({ equipment, onSelect, onAdd }) {
                       animation: `si 0.4s ${0.08 + i * 0.04}s both`,
                       transition: "box-shadow 0.2s",
                     }}>
-                      {/* Image placeholder / arc */}
                       <div style={{ position: "relative", flexShrink: 0 }}>
                         <Arc percent={ww} size={50} stroke={4} />
                         <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{catDef.emoji}</span>
                       </div>
-                      {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{eq.name}</div>
                         <div style={{ fontSize: 10.5, color: C.sub, marginTop: 1 }}>{eq.subtype}</div>
@@ -299,7 +367,6 @@ function EquipmentList({ equipment, onSelect, onAdd }) {
                           {eq.serialNumber && <span>SN: {eq.serialNumber.slice(0, 8)}…</span>}
                         </div>
                       </div>
-                      {/* Wear badge */}
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 17, fontWeight: 800, color: wc, fontFamily: "'JetBrains Mono', monospace" }}>{ww}%</div>
                         <div style={{ fontSize: 8, color: C.muted, marginTop: 1 }}>max wear</div>
@@ -434,7 +501,6 @@ function EquipmentDetail({ eq, catDef, onBack, onResetWear }) {
             ))}
           </div>
 
-          {/* Edit hint */}
           <div style={{ marginTop: 12, background: C.accentLight, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 14 }}>✏️</span>
             <div style={{ fontSize: 11, color: C.accent, fontWeight: 600 }}>Tippe auf ein Feld zum Bearbeiten</div>
@@ -485,7 +551,6 @@ function EquipmentDetail({ eq, catDef, onBack, onResetWear }) {
             );
           })}
 
-          {/* Add wear part hint */}
           <div style={{ background: C.card, borderRadius: 14, padding: "14px", textAlign: "center", border: `2px dashed ${C.border}`, cursor: "pointer" }}>
             <span style={{ fontSize: 12, color: C.sub }}>+ Verschleißteil hinzufügen</span>
           </div>
@@ -506,22 +571,30 @@ function AddEquipmentSheet({ category, catDef, onClose, onSave }) {
   const [retailer, setRetailer] = useState("");
   const [notes, setNotes] = useState("");
   const [specs, setSpecs] = useState({});
-  const [step, setStep] = useState(1); // 1=basics, 2=specs
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
 
   const inp = { width: "100%", background: C.bg, border: `2px solid transparent`, borderRadius: 12, padding: "11px 14px", color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "'Satoshi', sans-serif", transition: "border-color 0.2s" };
 
-  function handleSave() {
-    if (!name.trim()) return;
-    onSave({
-      id: "eq" + Date.now(), category, name: name.trim(), subtype: subtype || catDef.label,
-      serialNumber: serial, purchaseDate: new Date().toISOString().split("T")[0],
-      purchasePrice: Number(price) || 0, retailer, notes, specs,
-      totalKm: 0, wearParts: catDef.wearParts.map((wp, i) => ({
-        id: "wnew" + Date.now() + i, name: wp.name, icon: wp.icon, brand: "–",
-        km: 0, maxKm: wp.defaultMax, date: new Date().toISOString().split("T")[0], cost: 0,
-      })),
-    });
-    onClose();
+  async function handleSave() {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        category, name: name.trim(), subtype: subtype || catDef.label,
+        serialNumber: serial, purchaseDate: new Date().toISOString().split("T")[0],
+        purchasePrice: Number(price) || 0, retailer, notes, specs,
+        totalKm: 0, wearParts: catDef.wearParts.map((wp, i) => ({
+          id: "wnew" + Date.now() + i, name: wp.name, icon: wp.icon, brand: "–",
+          km: 0, maxKm: wp.defaultMax, date: new Date().toISOString().split("T")[0], cost: 0,
+        })),
+      });
+      onClose();
+    } catch (err) {
+      console.error("Save failed:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -537,7 +610,6 @@ function AddEquipmentSheet({ category, catDef, onClose, onSave }) {
           </div>
         </div>
 
-        {/* Progress indicator */}
         <div style={{ display: "flex", gap: 4, marginBottom: 18 }}>
           <div style={{ flex: 1, height: 3, borderRadius: 2, background: C.accent }} />
           <div style={{ flex: 1, height: 3, borderRadius: 2, background: step >= 2 ? C.accent : C.border, transition: "background 0.3s" }} />
@@ -603,7 +675,7 @@ function AddEquipmentSheet({ category, catDef, onClose, onSave }) {
 
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setStep(1)} style={{ flex: 1, padding: 14, borderRadius: 14, border: `1px solid ${C.border}`, background: "transparent", color: C.sub, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>← Zurück</button>
-              <button onClick={handleSave} style={{ flex: 2, padding: 14, borderRadius: 14, border: "none", background: C.accent, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Speichern ✓</button>
+              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 14, borderRadius: 14, border: "none", background: saving ? C.muted : C.accent, color: "#fff", fontSize: 15, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>{saving ? "Speichert..." : "Speichern ✓"}</button>
             </div>
           </>
         )}
@@ -631,7 +703,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
           </div>
         </div>
 
-        {/* Explanation */}
         <div style={{ background: "#FC4C0208", borderRadius: 12, padding: "12px 14px", marginBottom: 18, border: "1px solid #FC4C0215" }}>
           <div style={{ fontSize: 11, color: "#FC4C02", fontWeight: 600, marginBottom: 4 }}>So funktioniert's:</div>
           <div style={{ fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
@@ -639,7 +710,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
           </div>
         </div>
 
-        {/* Strava gear list with pairing */}
         <div style={{ fontSize: 10, fontWeight: 700, color: C.sub, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>STRAVA GEAR ({stravaGear.length})</div>
 
         {stravaGear.map(sg => {
@@ -656,7 +726,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
               borderRadius: 14, padding: "14px 16px", marginBottom: 10,
               border: `1px solid ${isPaired ? C.green + "30" : C.border}`,
             }}>
-              {/* Strava gear header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: isPaired ? 8 : 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: "#FC4C0210", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <span style={{ fontSize: 16 }}>{sg.type === "bike" ? "🚲" : "👟"}</span>
@@ -674,7 +743,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
                 )}
               </div>
 
-              {/* Paired state */}
               {isPaired ? (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.card, borderRadius: 10, padding: "10px 12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -684,7 +752,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
                   <button onClick={() => onUnpair(pairedEq.id)} style={{ fontSize: 10, color: C.red, background: C.redLight, border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontWeight: 600 }}>Trennen</button>
                 </div>
               ) : (
-                /* Unpaired – show dropdown of compatible equipment */
                 <div>
                   <div style={{ fontSize: 10, color: C.sub, marginBottom: 6 }}>Zuordnen zu:</div>
                   {compatibleEquipment.length > 0 ? (
@@ -714,7 +781,6 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
           );
         })}
 
-        {/* Info about Ski/Snowboard */}
         <div style={{ background: C.accentLight, borderRadius: 12, padding: "12px 14px", marginTop: 8 }}>
           <div style={{ fontSize: 11, color: C.accent, fontWeight: 600 }}>ℹ️ Ski & Snowboard</div>
           <div style={{ fontSize: 11, color: C.sub, marginTop: 2, lineHeight: 1.4 }}>
@@ -727,7 +793,7 @@ function StravaPairingSheet({ equipment, stravaGear, onPair, onUnpair, onClose }
 }
 
 // ══════════════════════════════════════
-//  ACTIVITY SYNC VIEW (shows how sync works)
+//  ACTIVITY SYNC VIEW
 // ══════════════════════════════════════
 function SyncActivityView({ activities, equipment, onClose }) {
   return (
@@ -749,7 +815,6 @@ function SyncActivityView({ activities, equipment, onClose }) {
               background: C.bg, borderRadius: 14, padding: "14px 16px", marginBottom: 8,
               border: `1px solid ${C.border}`, animation: `si 0.3s ${i * 0.04}s both`,
             }}>
-              {/* Activity header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: isIndoor ? C.accentLight : C.greenLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
                   {isIndoor ? "🖥️" : act.type === "Ride" ? "🚲" : "🏃"}
@@ -761,15 +826,12 @@ function SyncActivityView({ activities, equipment, onClose }) {
                 {isIndoor && <span style={{ fontSize: 8, fontWeight: 800, color: C.accent, background: C.accentLight, padding: "3px 8px", borderRadius: 6 }}>INDOOR</span>}
               </div>
 
-              {/* Gear mapping */}
               {pairedEq ? (
                 <div style={{ background: C.card, borderRadius: 10, padding: "10px 12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <div style={{ width: 6, height: 6, borderRadius: 3, background: C.green }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: C.text }}>→ {pairedEq.name}</span>
                   </div>
-
-                  {/* Which parts get km */}
                   <div style={{ fontSize: 10, color: C.sub, lineHeight: 1.6 }}>
                     {isIndoor ? (
                       <>
@@ -796,11 +858,14 @@ function SyncActivityView({ activities, equipment, onClose }) {
 }
 
 // ══════════════════════════════════════
-//  MAIN APP
+//  MAIN APP (with Auth + Supabase)
 // ══════════════════════════════════════
 export default function App() {
-  const [equipment, setEquipment] = useState(INITIAL_EQUIPMENT);
-  const [screen, setScreen] = useState("list"); // list | detail
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [equipment, setEquipment] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [screen, setScreen] = useState("list");
   const [selectedId, setSelectedId] = useState(null);
   const [addCategory, setAddCategory] = useState(null);
   const [toast, setToast] = useState(null);
@@ -810,35 +875,130 @@ export default function App() {
   const selectedEq = equipment.find(e => e.id === selectedId);
   const selectedCat = selectedEq ? CATEGORIES[selectedEq.category] : null;
 
+  // ── Auth listener ──
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Load equipment when logged in ──
+  const loadEquipment = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    try {
+      const data = await fetchEquipment();
+      setEquipment(data);
+    } catch (err) {
+      console.error("Failed to load equipment:", err);
+      flash("Fehler beim Laden");
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session) loadEquipment();
+  }, [session, loadEquipment]);
+
   function handleSelect(id) { setSelectedId(id); setScreen("detail"); }
   function handleBack() { setScreen("list"); setSelectedId(null); }
   function handleAdd(catKey) { setAddCategory(catKey); }
 
-  function handleSaveNew(newEq) {
-    setEquipment(prev => [...prev, newEq]);
-    flash("Equipment hinzugefügt ✓");
+  async function handleSaveNew(newEq) {
+    try {
+      await insertEquipment(newEq, session.user.id);
+      await loadEquipment();
+      flash("Equipment hinzugefügt ✓");
+    } catch (err) {
+      console.error("Insert failed:", err);
+      flash("Fehler beim Speichern");
+      throw err;
+    }
   }
 
-  function handleResetWear(eqId, wearId) {
-    setEquipment(prev => prev.map(e => e.id !== eqId ? e : {
-      ...e, wearParts: e.wearParts.map(w => w.id !== wearId ? w : { ...w, km: 0, date: new Date().toISOString().split("T")[0] }),
-    }));
-    flash("Zurückgesetzt ✓");
+  async function handleResetWear(eqId, wearId) {
+    try {
+      await resetWearPart(wearId);
+      // Optimistic update
+      setEquipment(prev => prev.map(e => e.id !== eqId ? e : {
+        ...e, wearParts: e.wearParts.map(w => w.id !== wearId ? w : { ...w, km: 0, date: new Date().toISOString().split("T")[0] }),
+      }));
+      flash("Zurückgesetzt ✓");
+    } catch (err) {
+      console.error("Reset failed:", err);
+      flash("Fehler beim Zurücksetzen");
+    }
   }
 
-  function handleStravaPair(eqId, stravaGearId) {
-    setEquipment(prev => prev.map(e => e.id !== eqId ? e : { ...e, stravaGearId }));
-    const sg = STRAVA_GEAR.find(s => s.strava_id === stravaGearId);
-    flash(`Verbunden mit Strava: ${sg?.name || stravaGearId}`);
+  async function handleStravaPair(eqId, stravaGearId) {
+    try {
+      await updateEquipmentField(eqId, { stravaGearId });
+      setEquipment(prev => prev.map(e => e.id !== eqId ? e : { ...e, stravaGearId }));
+      const sg = STRAVA_GEAR.find(s => s.strava_id === stravaGearId);
+      flash(`Verbunden mit Strava: ${sg?.name || stravaGearId}`);
+    } catch (err) {
+      console.error("Pair failed:", err);
+      flash("Fehler beim Verbinden");
+    }
   }
 
-  function handleStravaUnpair(eqId) {
-    setEquipment(prev => prev.map(e => e.id !== eqId ? e : { ...e, stravaGearId: null }));
-    flash("Strava-Verbindung getrennt");
+  async function handleStravaUnpair(eqId) {
+    try {
+      await updateEquipmentField(eqId, { stravaGearId: null });
+      setEquipment(prev => prev.map(e => e.id !== eqId ? e : { ...e, stravaGearId: null }));
+      flash("Strava-Verbindung getrennt");
+    } catch (err) {
+      console.error("Unpair failed:", err);
+      flash("Fehler beim Trennen");
+    }
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setEquipment([]);
+    setScreen("list");
+    setSelectedId(null);
   }
 
   function flash(m) { setToast(m); setTimeout(() => setToast(null), 2500); }
 
+  // ── Auth loading state ──
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Satoshi', 'DM Sans', -apple-system, sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <Logo size={48} />
+          <div style={{ fontSize: 13, color: C.sub, marginTop: 12 }}>Laden...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not logged in → show auth ──
+  if (!session) {
+    return (
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+          @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap');
+          @keyframes si{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+          @keyframes fi{from{opacity:0}to{opacity:1}}
+          *{box-sizing:border-box;margin:0;padding:0}
+        `}</style>
+        <AuthScreen />
+      </>
+    );
+  }
+
+  // ── Logged in → show app ──
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Satoshi', 'DM Sans', -apple-system, sans-serif", maxWidth: 430, margin: "0 auto", position: "relative", paddingBottom: 20 }}>
       <style>{`
@@ -874,15 +1034,28 @@ export default function App() {
             <button onClick={() => handleAdd("bike")} style={{ background: C.accent, border: "none", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 300 }}>+</button>
           </div>
         </div>
+        {/* User bar */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 11, color: C.sub, fontWeight: 500 }}>{session.user.email}</div>
+          <button onClick={handleLogout} style={{ background: "none", border: "none", fontSize: 11, color: C.muted, cursor: "pointer", fontWeight: 600 }}>Abmelden</button>
+        </div>
       </div>
 
       {/* ═══ CONTENT ═══ */}
       <div style={{ paddingTop: 14 }}>
-        {screen === "list" && (
-          <EquipmentList equipment={equipment} onSelect={handleSelect} onAdd={handleAdd} />
-        )}
-        {screen === "detail" && selectedEq && selectedCat && (
-          <EquipmentDetail eq={selectedEq} catDef={selectedCat} onBack={handleBack} onResetWear={handleResetWear} />
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "60px 20px" }}>
+            <div style={{ fontSize: 13, color: C.sub }}>Daten werden geladen...</div>
+          </div>
+        ) : (
+          <>
+            {screen === "list" && (
+              <EquipmentList equipment={equipment} onSelect={handleSelect} onAdd={handleAdd} />
+            )}
+            {screen === "detail" && selectedEq && selectedCat && (
+              <EquipmentDetail eq={selectedEq} catDef={selectedCat} onBack={handleBack} onResetWear={handleResetWear} />
+            )}
+          </>
         )}
       </div>
 
